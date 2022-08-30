@@ -1,6 +1,7 @@
 #include <LiquidCrystal.h>
 
 // Latest v1.8.6 as of March 24. Confirmed L298 Works (without pwn connected) change delay to 1k at least
+// Added Github 7.28.2200000000000000000000000000000000000000000000000000000000000000
 // motor goes oneway only
 
 LiquidCrystal lcd(12, 11, 10, 5, 4, 3, 2); // LCD pin rs rw en d4 d5 d6 d7.
@@ -31,7 +32,7 @@ void writeLCD(int cans) {
 
     lcd.begin(16, 2);
 
-    lcd.print("Adams CanCrshr1");
+    lcd.print("Adams CC 7.28.22.v1");
 
     delay(3000);
 
