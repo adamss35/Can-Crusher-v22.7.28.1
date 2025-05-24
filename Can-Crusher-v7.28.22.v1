@@ -1,0 +1,106 @@
+/*
+  Adams Can Crusher Controller
+  Version 7.28.22.v1 - Confirmed L298N H-Bridge works without PWM
+  Author: Shawn Adams
+
+  NOTES:
+  - StartPin: Limit switch triggers motor start when can is present
+  - DirPin: Limit switch at end of travel to reverse motor
+  - Motor spins forward until DirPin hit, then reverses
+  - Motor control uses H-Bridge (L298N), enable always HIGH (no PWM)
+  - LCD updates only after a complete crush cycle
+  - State machine uses `runningCan` (0=idle, 1=forward, 2=reverse)
+  - Confirmed on Arduino Nano, LCD 16x2, no flickering with updateLCD()
+
+  CHANGELOG:
+  - v1.8.6 (Mar 24): Delay increased to 1000ms to prevent repeat
+  - v7.28.22: Direction logic added, startup splash, motor bug fixed
+*/
+
+#include <LiquidCrystal.h>
+
+// LCD pins: RS, RW, E, D4, D5, D6, D7
+LiquidCrystal lcd(12, 11, 10, 5, 4, 3, 2);
+
+// Pin assignments
+int StartPin    = 9;  // Can detected switch
+int motor1Pin   = 8;  // H-bridge motor pin 1
+int motor2Pin   = 7;  // H-bridge motor pin 2
+int enablePin   = 6;  // H-bridge enable (optional)
+int DirPin      = 13; // End limit switch for reversing
+
+bool lastDirectionForward = true;
+byte runningCan = 0;
+int cansCrushed = 0;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(StartPin, INPUT);
+  pinMode(DirPin, INPUT);
+  pinMode(motor1Pin, OUTPUT);
+  pinMode(motor2Pin, OUTPUT);
+  pinMode(enablePin, OUTPUT);
+
+  digitalWrite(enablePin, HIGH);  // Always on unless you want PWM
+
+  lcd.begin(16, 2);
+  lcd.print("Adams CanCrshr1");
+  delay(2000);
+  lcd.clear();
+  updateLCD();
+}
+
+// === Update LCD with current stats ===
+void updateLCD() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Crushed:");
+  lcd.setCursor(10, 0);
+  lcd.print(cansCrushed);
+  lcd.setCursor(0, 1);
+  lcd.print("Weight:");
+  lcd.setCursor(9, 1);
+  lcd.print((int)(cansCrushed * 0.034375));
+}
+
+// === Start crushing cycle ===
+void loop() {
+  // Step 1: Wait for can present signal
+  if (runningCan == 0 && digitalRead(StartPin) == HIGH) {
+    Serial.println("Can detected - starting motor");
+    if (lastDirectionForward) {
+      digitalWrite(motor1Pin, HIGH);
+      digitalWrite(motor2Pin, LOW);
+    } else {
+      digitalWrite(motor1Pin, LOW);
+      digitalWrite(motor2Pin, HIGH);
+    }
+    runningCan = 1;
+    delay(100); // Debounce
+  }
+
+  // Step 2: Wait until DirPin is triggered to reverse
+  if (runningCan == 1 && digitalRead(DirPin) == HIGH) {
+    Serial.println("End reached - reversing motor");
+    if (lastDirectionForward) {
+      digitalWrite(motor1Pin, LOW);
+      digitalWrite(motor2Pin, HIGH);
+    } else {
+      digitalWrite(motor1Pin, HIGH);
+      digitalWrite(motor2Pin, LOW);
+    }
+    lastDirectionForward = !lastDirectionForward;
+    runningCan = 2;
+    delay(500); // Let motor reverse long enough
+  }
+
+  // Step 3: Wait for StartPin to go LOW (can has moved away) then stop motor
+  if (runningCan == 2 && digitalRead(StartPin) == LOW) {
+    digitalWrite(motor1Pin, LOW);
+    digitalWrite(motor2Pin, LOW);
+    Serial.println("Cycle complete - motor off");
+    cansCrushed++;
+    updateLCD();
+    runningCan = 0;
+  }
+}
